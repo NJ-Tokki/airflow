@@ -47,7 +47,7 @@ Before deciding which method to choose, there are a couple of factors to conside
 Local machine development
 #########################
 
-If you do not work in remote development environment, you need those prerequisites.
+If you do not work in a remote development environment, you will need these prerequisites:
 
 1. Docker Community Edition (you can also use Colima, see instructions below)
 2. Docker Compose
@@ -164,7 +164,7 @@ like system, this command will install all necessary dependencies that should be
 .. code-block:: bash
 
   sudo apt install apt-transport-https apt-utils build-essential ca-certificates dirmngr \
-  freetds-bin freetds-dev git gosu graphviz graphviz-dev krb5-user ldap-utils libffi-dev \
+  freetds-bin freetds-dev git graphviz graphviz-dev krb5-user ldap-utils libffi-dev \
   libkrb5-dev libldap2-dev libpq-dev libsasl2-2 libsasl2-dev libsasl2-modules \
   libssl-dev locales lsb-release openssh-client sasl2-bin \
   software-properties-common sqlite3 sudo unixodbc unixodbc-dev

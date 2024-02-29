@@ -1552,7 +1552,7 @@ class Airflow(AirflowBaseView):
             execution_date = timezone.parse(execution_date_str, strict=True)
         except ValueError:
             error_message = (
-                f"Given execution date, {execution_date}, could not be identified as a date. "
+                f"Given execution date {execution_date_str!r} could not be identified as a date. "
                 "Example date format: 2015-11-16T14:34:15+00:00"
             )
             return {"error": error_message}, 400
@@ -2152,6 +2152,7 @@ class Airflow(AirflowBaseView):
                 form_fields=form_fields,
                 **render_params,
                 conf=request_conf,
+                form=form,
             )
 
         flash(f"Triggered {dag_id}, it should start any moment now.")
