@@ -17,11 +17,16 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from airflow.exceptions import AirflowOptionalProviderFeatureException
 from airflow.providers.dbt.cloud.hooks.dbt import DbtCloudHook
 from airflow.providers.dbt.cloud.operators.dbt import DbtCloudRunJobOperator
 from airflow.providers.dbt.cloud.utils.openlineage import generate_openlineage_events_from_dbt_cloud_run
+from airflow.providers.openlineage.extractors import OperatorLineage
 
 TASK_ID = "dbt_test"
 DAG_ID = "dbt_dag"
@@ -37,8 +42,18 @@ class MockResponse:
 
 
 def emit_event(event):
-    assert event.run.facets["parent"].run["runId"] == TASK_UUID
-    assert event.run.facets["parent"].job["name"] == f"{DAG_ID}.{TASK_ID}"
+    run_id = TASK_UUID
+    name = f"{DAG_ID}.{TASK_ID}"
+    run_obj = event.run.facets["parent"].run
+    job_obj = event.run.facets["parent"].job
+    if isinstance(run_obj, dict):
+        assert run_obj["runId"] == run_id
+    else:
+        assert run_obj.runId == run_id
+    if isinstance(job_obj, dict):
+        assert job_obj["name"] == name
+    else:
+        assert job_obj.name == name
     assert event.job.namespace == "default"
     assert event.job.name.startswith("SANDBOX.TEST_SCHEMA.test_project")
 
@@ -65,15 +80,35 @@ def read_file_json(file):
 def get_dbt_artifact(*args, **kwargs):
     json_file = None
     if "catalog" in kwargs["path"]:
-        json_file = "tests/providers/dbt/cloud/test_data/catalog.json"
+        json_file = Path(__file__).parents[1] / "test_data" / "catalog.json"
     elif "manifest" in kwargs["path"]:
-        json_file = "tests/providers/dbt/cloud/test_data/manifest.json"
+        json_file = Path(__file__).parents[1] / "test_data" / "manifest.json"
     elif "run_results" in kwargs["path"]:
-        json_file = "tests/providers/dbt/cloud/test_data/run_results.json"
+        json_file = Path(__file__).parents[1] / "test_data" / "run_results.json"
 
     if json_file is not None:
         return MockResponse(read_file_json(json_file))
     return None
+
+
+def test_previous_version_openlineage_provider():
+    """When using OpenLineage, the dbt-cloud provider now depends on openlineage provider >= 1.7"""
+    original_import = __import__
+
+    def custom_import(name, *args, **kwargs):
+        if name == "airflow.providers.openlineage.conf":
+            raise ModuleNotFoundError("No module named 'airflow.providers.openlineage.conf")
+        else:
+            return original_import(name, *args, **kwargs)
+
+    mock_operator = MagicMock()
+    mock_task_instance = MagicMock()
+
+    with patch("builtins.__import__", side_effect=custom_import):
+        with pytest.raises(AirflowOptionalProviderFeatureException) as exc:
+            generate_openlineage_events_from_dbt_cloud_run(mock_operator, mock_task_instance)
+    assert str(exc.value.args[0]) == "No module named 'airflow.providers.openlineage.conf"
+    assert str(exc.value.args[1]) == "Please install `apache-airflow-providers-openlineage>=1.7.0`"
 
 
 class TestGenerateOpenLineageEventsFromDbtCloudRun:
@@ -97,7 +132,7 @@ class TestGenerateOpenLineageEventsFromDbtCloudRun:
         mock_operator.hook = mock_hook
 
         mock_get_job_run.return_value.json.return_value = read_file_json(
-            "tests/providers/dbt/cloud/test_data/job_run.json"
+            Path(__file__).parents[1] / "test_data" / "job_run.json"
         )
         mock_get_project.return_value.json.return_value = {
             "data": {
@@ -130,7 +165,10 @@ class TestGenerateOpenLineageEventsFromDbtCloudRun:
         )
 
         mock_build_task_instance_run_id.return_value = TASK_UUID
-
         generate_openlineage_events_from_dbt_cloud_run(mock_operator, task_instance=mock_task_instance)
-
         assert mock_client.emit.call_count == 4
+
+    def test_do_not_raise_error_if_runid_not_set_on_operator(self):
+        operator = DbtCloudRunJobOperator(task_id="dbt-job-runid-taskid", job_id=1500)
+        assert operator.run_id is None
+        assert operator.get_openlineage_facets_on_complete(MagicMock()) == OperatorLineage()

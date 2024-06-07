@@ -17,14 +17,15 @@
 # under the License.
 from __future__ import annotations
 
-import io
 import json
 import logging
 import os
 import re
 import shutil
+from io import StringIO
 from pathlib import Path
 from unittest import mock
+from unittest.mock import Mock, patch
 from urllib.parse import quote
 
 import elasticsearch
@@ -42,11 +43,12 @@ from airflow.providers.elasticsearch.log.es_task_handler import (
 from airflow.utils import timezone
 from airflow.utils.state import DagRunState, TaskInstanceState
 from airflow.utils.timezone import datetime
+from tests.providers.elasticsearch.log.elasticmock import elasticmock
+from tests.providers.elasticsearch.log.elasticmock.utilities import SearchFailedException
 from tests.test_utils.config import conf_vars
 from tests.test_utils.db import clear_db_dags, clear_db_runs
 
-from .elasticmock import elasticmock
-from .elasticmock.utilities import SearchFailedException
+pytestmark = pytest.mark.db_test
 
 AIRFLOW_SOURCES_ROOT_DIR = Path(__file__).parents[4].resolve()
 ES_PROVIDER_YAML_FILE = AIRFLOW_SOURCES_ROOT_DIR / "airflow" / "providers" / "elasticsearch" / "provider.yaml"
@@ -73,7 +75,7 @@ class TestElasticsearchTaskHandler:
     JSON_LOG_ID = f"{DAG_ID}-{TASK_ID}-{ElasticsearchTaskHandler._clean_date(EXECUTION_DATE)}-1"
     FILENAME_TEMPLATE = "{try_number}.log"
 
-    @pytest.fixture()
+    @pytest.fixture
     def ti(self, create_task_instance, create_log_template):
         create_log_template(self.FILENAME_TEMPLATE, "{dag_id}-{task_id}-{execution_date}-{try_number}")
         yield get_ti(
@@ -120,10 +122,8 @@ class TestElasticsearchTaskHandler:
         logs_by_host = self.es_task_handler._group_logs_by_host(es_response)
 
         def concat_logs(lines):
-            log_range = (
-                (len(lines) - 1) if lines[-1].message == self.es_task_handler.end_of_log_mark else len(lines)
-            )
-            return "\n".join(self.es_task_handler._format_msg(lines[i]) for i in range(log_range))
+            log_range = -1 if lines[-1].message == self.es_task_handler.end_of_log_mark else None
+            return "\n".join(self.es_task_handler._format_msg(line) for line in lines[:log_range])
 
         for hosted_log in logs_by_host.values():
             message = concat_logs(hosted_log)
@@ -604,7 +604,7 @@ class TestElasticsearchTaskHandler:
         self.es_task_handler.frontend = frontend
         assert self.es_task_handler.supports_external_link == expected
 
-    @mock.patch("sys.__stdout__", new_callable=io.StringIO)
+    @mock.patch("sys.__stdout__", new_callable=StringIO)
     def test_dynamic_offset(self, stdout_mock, ti, time_machine):
         # arrange
         handler = ElasticsearchTaskHandler(
@@ -643,10 +643,21 @@ class TestElasticsearchTaskHandler:
         assert second_log["asctime"] == t2.format("YYYY-MM-DDTHH:mm:ss.SSSZZ")
         assert third_log["asctime"] == t3.format("YYYY-MM-DDTHH:mm:ss.SSSZZ")
 
+    def test_get_index_patterns_with_callable(self):
+        with patch("airflow.providers.elasticsearch.log.es_task_handler.import_string") as mock_import_string:
+            mock_callable = Mock(return_value="callable_index_pattern")
+            mock_import_string.return_value = mock_callable
+
+            self.es_task_handler.index_patterns_callable = "path.to.index_pattern_callable"
+            result = self.es_task_handler._get_index_patterns({})
+
+            mock_import_string.assert_called_once_with("path.to.index_pattern_callable")
+            mock_callable.assert_called_once_with({})
+            assert result == "callable_index_pattern"
+
 
 def test_safe_attrgetter():
-    class A:
-        ...
+    class A: ...
 
     a = A()
     a.b = "b"
@@ -670,14 +681,11 @@ def test_retrieve_config_keys():
     """
     with conf_vars(
         {
-            ("elasticsearch_configs", "use_ssl"): "True",
             ("elasticsearch_configs", "http_compress"): "False",
             ("elasticsearch_configs", "timeout"): "10",
         }
     ):
         args_from_config = get_es_kwargs_from_config().keys()
-        # use_ssl is removed from config
-        assert "use_ssl" not in args_from_config
         # verify_certs comes from default config value
         assert "verify_certs" in args_from_config
         # timeout comes from config provided value
@@ -697,8 +705,6 @@ def test_retrieve_retry_on_timeout():
         }
     ):
         args_from_config = get_es_kwargs_from_config().keys()
-        # use_ssl is removed from config
-        assert "retry_timeout" not in args_from_config
         # verify_certs comes from default config value
         assert "retry_on_timeout" in args_from_config
 

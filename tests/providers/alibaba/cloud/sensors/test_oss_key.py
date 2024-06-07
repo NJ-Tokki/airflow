@@ -35,6 +35,8 @@ MOCK_KEY = "mock_key"
 MOCK_KEYS = ["mock_key1", "mock_key_2", "mock_key3"]
 MOCK_CONTENT = "mock_content"
 
+# mypy: disable-error-code="call-overload"
+
 
 @pytest.fixture
 def oss_key_sensor():
@@ -50,10 +52,10 @@ def oss_key_sensor():
 class TestOSSKeySensor:
     @mock.patch(f"{MODULE_NAME}.OSSHook")
     def test_get_hook(self, mock_service, oss_key_sensor):
-        oss_key_sensor.get_hook()
+        oss_key_sensor.hook
         mock_service.assert_called_once_with(oss_conn_id=MOCK_OSS_CONN_ID, region=MOCK_REGION)
 
-    @mock.patch(f"{MODULE_NAME}.OSSKeySensor.get_hook", new_callable=PropertyMock)
+    @mock.patch(f"{MODULE_NAME}.OSSKeySensor.hook", new_callable=PropertyMock)
     def test_poke_exsiting_key(self, mock_service, oss_key_sensor):
         # Given
         mock_service.return_value.object_exists.return_value = True
@@ -65,7 +67,7 @@ class TestOSSKeySensor:
         assert res is True
         mock_service.return_value.object_exists.assert_called_once_with(key=MOCK_KEY, bucket_name=MOCK_BUCKET)
 
-    @mock.patch(f"{MODULE_NAME}.OSSKeySensor.get_hook", new_callable=PropertyMock)
+    @mock.patch(f"{MODULE_NAME}.OSSKeySensor.hook", new_callable=PropertyMock)
     def test_poke_non_exsiting_key(self, mock_service, oss_key_sensor):
         # Given
         mock_service.return_value.object_exists.return_value = False
@@ -80,7 +82,7 @@ class TestOSSKeySensor:
     @pytest.mark.parametrize(
         "soft_fail, expected_exception", ((False, AirflowException), (True, AirflowSkipException))
     )
-    @mock.patch(f"{MODULE_NAME}.OSSKeySensor.get_hook", new_callable=PropertyMock)
+    @mock.patch(f"{MODULE_NAME}.OSSKeySensor.hook", new_callable=PropertyMock)
     def test_poke_without_bucket_name(
         self, mock_service, oss_key_sensor, soft_fail: bool, expected_exception: AirflowException
     ):

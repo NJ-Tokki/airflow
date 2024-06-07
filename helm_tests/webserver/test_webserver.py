@@ -25,6 +25,19 @@ from tests.charts.helm_template_generator import render_chart
 class TestWebserverDeployment:
     """Tests webserver deployment."""
 
+    def test_can_be_disabled(self):
+        """
+        Webserver should be able to be disabled if the users desires.
+
+        For example, user may be disabled when using webserver and having it deployed on another host.
+        """
+        docs = render_chart(
+            values={"webserver": {"enabled": False}},
+            show_only=["templates/webserver/webserver-deployment.yaml"],
+        )
+
+        assert 0 == len(docs)
+
     def test_should_add_host_header_to_liveness_and_readiness_and_startup_probes(self):
         docs = render_chart(
             values={
@@ -175,7 +188,7 @@ class TestWebserverDeployment:
                 "executor": "CeleryExecutor",
                 "webserver": {
                     "extraContainers": [
-                        {"name": "test-container", "image": "test-registry/test-repo:test-tag"}
+                        {"name": "{{.Chart.Name}}", "image": "test-registry/test-repo:test-tag"}
                     ],
                 },
             },
@@ -183,8 +196,23 @@ class TestWebserverDeployment:
         )
 
         assert {
-            "name": "test-container",
+            "name": "airflow",
             "image": "test-registry/test-repo:test-tag",
+        } == jmespath.search("spec.template.spec.containers[-1]", docs[0])
+
+    def test_should_template_extra_containers(self):
+        docs = render_chart(
+            values={
+                "executor": "CeleryExecutor",
+                "webserver": {
+                    "extraContainers": [{"name": "{{ .Release.Name }}-test-container"}],
+                },
+            },
+            show_only=["templates/webserver/webserver-deployment.yaml"],
+        )
+
+        assert {
+            "name": "release-name-test-container",
         } == jmespath.search("spec.template.spec.containers[-1]", docs[0])
 
     def test_should_add_extraEnvs(self):
@@ -300,6 +328,20 @@ class TestWebserverDeployment:
         assert {
             "name": "test-init-container",
             "image": "test-registry/test-repo:test-tag",
+        } == jmespath.search("spec.template.spec.initContainers[-1]", docs[0])
+
+    def test_should_template_extra_init_containers(self):
+        docs = render_chart(
+            values={
+                "webserver": {
+                    "extraInitContainers": [{"name": "{{ .Release.Name }}-init-container"}],
+                },
+            },
+            show_only=["templates/webserver/webserver-deployment.yaml"],
+        )
+
+        assert {
+            "name": "release-name-init-container",
         } == jmespath.search("spec.template.spec.initContainers[-1]", docs[0])
 
     def test_should_add_component_specific_labels(self):
@@ -1070,7 +1112,7 @@ class TestWebserverServiceAccount:
         )
         assert jmespath.search("automountServiceAccountToken", docs[0]) is True
 
-    def test_overriden_automount_service_account_token(self):
+    def test_overridden_automount_service_account_token(self):
         docs = render_chart(
             values={
                 "webserver": {

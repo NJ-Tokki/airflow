@@ -513,6 +513,26 @@ class TestBaseChartTest:
                 # Make sure that a command is not specified
                 assert "command" not in obj
 
+    @pytest.mark.parametrize(
+        "executor",
+        [
+            "LocalExecutor",
+            "LocalKubernetesExecutor",
+            "CeleryExecutor",
+            "KubernetesExecutor",
+            "CeleryKubernetesExecutor",
+            "airflow.providers.amazon.aws.executors.batch.AwsBatchExecutor",
+            "airflow.providers.amazon.aws.executors.ecs.AwsEcsExecutor",
+        ],
+    )
+    def test_supported_executor(self, executor):
+        render_chart(
+            "test-basic",
+            {
+                "executor": executor,
+            },
+        )
+
     def test_unsupported_executor(self):
         with pytest.raises(CalledProcessError) as ex_ctx:
             render_chart(
@@ -524,7 +544,9 @@ class TestBaseChartTest:
         assert (
             'executor must be one of the following: "LocalExecutor", '
             '"LocalKubernetesExecutor", "CeleryExecutor", '
-            '"KubernetesExecutor", "CeleryKubernetesExecutor"' in ex_ctx.value.stderr.decode()
+            '"KubernetesExecutor", "CeleryKubernetesExecutor", '
+            '"airflow.providers.amazon.aws.executors.batch.AwsBatchExecutor", '
+            '"airflow.providers.amazon.aws.executors.ecs.AwsEcsExecutor"' in ex_ctx.value.stderr.decode()
         )
 
     @pytest.mark.parametrize(
@@ -573,6 +595,32 @@ class TestBaseChartTest:
             == base64.b64decode(doc["data"]["connection"]).decode("utf-8")
         )
 
+    def test_postgres_connection_url_pgbouncer(self):
+        # no nameoverride, pgbouncer
+        doc = render_chart(
+            "my-release",
+            show_only=["templates/secrets/metadata-connection-secret.yaml"],
+            values={"pgbouncer": {"enabled": True}},
+        )[0]
+        assert (
+            "postgresql://postgres:postgres@my-release-pgbouncer.default:6543/"
+            "my-release-metadata?sslmode=disable"
+            == base64.b64decode(doc["data"]["connection"]).decode("utf-8")
+        )
+
+    def test_postgres_connection_url_pgbouncer_use_standard_naming(self):
+        # no nameoverride, pgbouncer and useStandardNaming
+        doc = render_chart(
+            "my-release",
+            show_only=["templates/secrets/metadata-connection-secret.yaml"],
+            values={"useStandardNaming": True, "pgbouncer": {"enabled": True}},
+        )[0]
+        assert (
+            "postgresql://postgres:postgres@my-release-airflow-pgbouncer.default:6543/"
+            "my-release-metadata?sslmode=disable"
+            == base64.b64decode(doc["data"]["connection"]).decode("utf-8")
+        )
+
     def test_postgres_connection_url_name_override(self):
         # nameoverride provided
         doc = render_chart(
@@ -605,6 +653,7 @@ class TestBaseChartTest:
             assert objs[i]["metadata"]["name"] == ("my-release" + "-" + pc[i]["name"])
             assert objs[i]["preemptionPolicy"] == pc[i]["preemptionPolicy"]
             assert objs[i]["value"] == pc[i]["value"]
+            assert objs[i]["description"] == "This priority class will not cause other pods to be preempted."
 
     def test_priority_classes_default_preemption(self):
         obj = render_chart(
@@ -618,6 +667,29 @@ class TestBaseChartTest:
         )[0]
 
         assert obj["preemptionPolicy"] == "PreemptLowerPriority"
+        assert obj["description"] == "This priority class will not cause other pods to be preempted."
+
+    def test_redis_broker_connection_url(self):
+        # no nameoverride, redis
+        doc = render_chart(
+            "my-release",
+            show_only=["templates/secrets/redis-secrets.yaml"],
+            values={"redis": {"enabled": True, "password": "test1234"}},
+        )[1]
+        assert "redis://:test1234@my-release-redis:6379/0" == base64.b64decode(
+            doc["data"]["connection"]
+        ).decode("utf-8")
+
+    def test_redis_broker_connection_url_use_standard_naming(self):
+        # no nameoverride, redis and useStandardNaming
+        doc = render_chart(
+            "my-release",
+            show_only=["templates/secrets/redis-secrets.yaml"],
+            values={"useStandardNaming": True, "redis": {"enabled": True, "password": "test1234"}},
+        )[1]
+        assert "redis://:test1234@my-release-airflow-redis:6379/0" == base64.b64decode(
+            doc["data"]["connection"]
+        ).decode("utf-8")
 
     @staticmethod
     def default_trigger_obj(version):

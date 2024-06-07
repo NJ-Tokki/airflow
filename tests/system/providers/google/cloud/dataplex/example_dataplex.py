@@ -17,13 +17,14 @@
 """
 Example Airflow DAG that shows how to use Dataplex.
 """
+
 from __future__ import annotations
 
 import datetime
 import os
 
-from airflow import models
 from airflow.models.baseoperator import chain
+from airflow.models.dag import DAG
 from airflow.providers.google.cloud.operators.dataplex import (
     DataplexCreateLakeOperator,
     DataplexCreateTaskOperator,
@@ -41,7 +42,7 @@ from airflow.providers.google.cloud.sensors.dataplex import DataplexTaskStateSen
 from airflow.utils.trigger_rule import TriggerRule
 
 ENV_ID = os.environ.get("SYSTEM_TESTS_ENV_ID")
-PROJECT_ID = os.environ.get("SYSTEM_TESTS_GCP_PROJECT")
+PROJECT_ID = os.environ.get("SYSTEM_TESTS_GCP_PROJECT", "project_id")
 
 DAG_ID = "example_dataplex"
 
@@ -77,13 +78,12 @@ EXAMPLE_LAKE_BODY = {
 # [END howto_dataplex_lake_configuration]
 
 
-with models.DAG(
+with DAG(
     DAG_ID,
     start_date=datetime.datetime(2021, 1, 1),
     schedule="@once",
     tags=["example", "dataplex"],
 ) as dag:
-
     create_bucket = GCSCreateBucketOperator(
         task_id="create_bucket", bucket_name=BUCKET_NAME, project_id=PROJECT_ID
     )

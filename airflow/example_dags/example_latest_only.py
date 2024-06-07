@@ -16,11 +16,12 @@
 # specific language governing permissions and limitations
 # under the License.
 """Example of the LatestOnlyOperator"""
+
 from __future__ import annotations
 
 import datetime
 
-from airflow import DAG
+from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.latest_only import LatestOnlyOperator
 

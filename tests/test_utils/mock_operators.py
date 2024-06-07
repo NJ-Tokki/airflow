@@ -21,8 +21,9 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 import attr
 
-from airflow.models.baseoperator import BaseOperator, BaseOperatorLink
+from airflow.models.baseoperator import BaseOperator
 from airflow.models.xcom import XCom
+from tests.test_utils.compat import BaseOperatorLink
 
 if TYPE_CHECKING:
     import jinja2
@@ -142,7 +143,6 @@ class CustomOpLink(BaseOperatorLink):
 
 
 class CustomOperator(BaseOperator):
-
     template_fields = ["bash_command"]
     custom_operator_name = "@custom"
 

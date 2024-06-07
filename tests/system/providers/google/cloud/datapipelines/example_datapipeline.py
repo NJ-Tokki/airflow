@@ -19,13 +19,14 @@
 """
 Example Airflow DAG for testing Google DataPipelines Create Data Pipeline Operator.
 """
+
 from __future__ import annotations
 
 import os
 from datetime import datetime
 from pathlib import Path
 
-from airflow import models
+from airflow.models.dag import DAG
 from airflow.providers.google.cloud.operators.datapipeline import (
     CreateDataPipelineOperator,
     RunDataPipelineOperator,
@@ -33,10 +34,11 @@ from airflow.providers.google.cloud.operators.datapipeline import (
 from airflow.providers.google.cloud.operators.gcs import GCSCreateBucketOperator, GCSDeleteBucketOperator
 from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
 from airflow.utils.trigger_rule import TriggerRule
+from tests.system.providers.google import DEFAULT_GCP_SYSTEM_TEST_PROJECT_ID
 
 DAG_ID = "google-datapipeline"
 ENV_ID = os.environ.get("SYSTEM_TESTS_ENV_ID")
-GCP_PROJECT_ID = os.environ.get("SYSTEM_TESTS_GCP_PROJECT")
+GCP_PROJECT_ID = os.environ.get("SYSTEM_TESTS_GCP_PROJECT") or DEFAULT_GCP_SYSTEM_TEST_PROJECT_ID
 GCP_LOCATION = os.environ.get("location", "us-central1")
 
 PIPELINE_NAME = os.environ.get("DATA_PIPELINE_NAME", "defualt-pipeline-name")
@@ -56,7 +58,7 @@ OUTPUT = f"gs://{BUCKET_NAME}/results/hello"
 FILE_LOCAL_PATH = str(Path(__file__).parent / "resources" / FILE_NAME)
 TEMPLATE_LOCAL_PATH = str(Path(__file__).parent / "resources" / TEMPLATE_FILE)
 
-with models.DAG(
+with DAG(
     DAG_ID,
     schedule="@once",
     start_date=datetime(2021, 1, 1),
